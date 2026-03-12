@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "LinkedIn Zip Plugin",
+  "version": "1.0.0",
+  "description": "Injects JavaScript into LinkedIn Zip game page",
+  "content_scripts": [
+    {
+      "matches": ["https://www.linkedin.com/games/zip/*"],
+      "js": ["html2canvas.min.js", "tesseract.min.js", "content.js"],
+      "run_at": "document_end"
+    }
+  ]
+}
