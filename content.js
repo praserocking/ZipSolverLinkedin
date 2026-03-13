@@ -131,8 +131,10 @@ async function processGridImage(canvas, gridElement) {
 
   console.log(`Found ${filledCells.length} cells with numbers`);
   console.log(`Found ${cellsWithBlocks.length} cells with blocks`);
+  console.log(`Grid size: ${Math.sqrt(gridData.length)}x${Math.sqrt(gridData.length)}`);
 
   // Solve the puzzle
+  console.log('Starting solver...');
   const solution = solvePuzzle(gridData);
   if (solution) {
     console.log('✅ SOLUTION FOUND!');
@@ -141,7 +143,7 @@ async function processGridImage(canvas, gridElement) {
     // Automatically draw the solution
     await drawSolution(gridData, solution);
   } else {
-    console.log('❌ No solution found');
+    console.log('❌ No solution found - puzzle may be unsolvable or timeout occurred');
   }
 }
 
@@ -298,7 +300,7 @@ function solvePuzzle(gridData) {
     .map(c => ({ ...c, value: parseInt(c.value) }))
     .sort((a, b) => a.value - b.value);
 
-  console.log('Numbered cells in order:', numberedCells);
+  console.log(`Solving ${gridSize}x${gridSize} grid with ${numberedCells.length} numbers`);
 
   if (numberedCells.length === 0) {
     console.log('No numbered cells found');
@@ -307,9 +309,24 @@ function solvePuzzle(gridData) {
 
   // Start from cell with value 1
   const startCell = numberedCells[0];
+  let iterations = 0;
+  const maxIterations = 1000000000; // 50 million iterations (10-15 seconds)
 
   // DFS to find path connecting all numbers in order
   function dfs(currentIndex, nextNumberIndex, visited, path) {
+    iterations++;
+
+    // Progress logging every 100k iterations
+    if (iterations % 100000 === 0) {
+      console.log(`Progress: ${iterations} iterations, visited ${visited.size}/${gridData.length} cells, next number: ${nextNumberIndex + 1}`);
+    }
+
+    // Timeout check
+    if (iterations > maxIterations) {
+      console.log('Solver timeout - too many iterations');
+      return false;
+    }
+
     // Mark current cell as visited
     visited.add(currentIndex);
     path.push(currentIndex);
@@ -324,14 +341,30 @@ function solvePuzzle(gridData) {
 
     // Check if we've visited all cells and all numbers
     if (visited.size === gridData.length && nextNumberIndex >= numberedCells.length) {
+      console.log(`Solution found after ${iterations} iterations`);
       return true;
     }
 
     // Get valid neighbors
     const neighbors = getValidNeighbors(currentIndex, gridData, gridSize, visited);
 
-    // Try each neighbor
+    // PRUNING: Check each neighbor to avoid creating isolated regions
+    const validNeighbors = [];
     for (const neighborIdx of neighbors) {
+      // Temporarily mark as visited
+      visited.add(neighborIdx);
+
+      // Check if remaining unvisited cells are still connected
+      if (areUnvisitedCellsConnected(gridData, gridSize, visited)) {
+        validNeighbors.push(neighborIdx);
+      }
+
+      // Unmark
+      visited.delete(neighborIdx);
+    }
+
+    // Try each valid neighbor
+    for (const neighborIdx of validNeighbors) {
       if (dfs(neighborIdx, nextNumberIndex, visited, path)) {
         return true;
       }
@@ -350,7 +383,42 @@ function solvePuzzle(gridData) {
     return path;
   }
 
+  console.log(`No solution found after ${iterations} iterations`);
   return null;
+}
+
+// Check if all unvisited cells are still connected (prevents creating isolated regions)
+function areUnvisitedCellsConnected(gridData, gridSize, visited) {
+  // Find first unvisited cell
+  let startUnvisited = -1;
+  for (let i = 0; i < gridData.length; i++) {
+    if (!visited.has(i)) {
+      startUnvisited = i;
+      break;
+    }
+  }
+
+  if (startUnvisited === -1) return true; // All visited
+
+  // BFS to check if all unvisited cells are reachable from startUnvisited
+  const queue = [startUnvisited];
+  const reachable = new Set([startUnvisited]);
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    const neighbors = getValidNeighbors(current, gridData, gridSize, visited);
+
+    for (const neighbor of neighbors) {
+      if (!reachable.has(neighbor)) {
+        reachable.add(neighbor);
+        queue.push(neighbor);
+      }
+    }
+  }
+
+  // Check if all unvisited cells are reachable
+  const unvisitedCount = gridData.length - visited.size;
+  return reachable.size === unvisitedCount;
 }
 
 // Get valid neighbors for a cell
