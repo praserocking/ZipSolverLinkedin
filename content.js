@@ -174,7 +174,7 @@ async function drawSolution(gridData, solution) {
   simulatePointerEvent(startElement, 'pointerdown', startX, startY);
   simulateMouseEvent(startElement, 'mousedown', startX, startY);
 
-  await sleep(150);
+  await sleep(50);
 
   // Simulate dragging through each cell in the solution
   for (let i = 0; i < solution.length; i++) {
@@ -199,7 +199,7 @@ async function drawSolution(gridData, solution) {
     simulateMouseEvent(document, 'mousemove', x, y);
     simulateMouseEvent(element, 'mouseenter', x, y);
 
-    await sleep(80);
+    await sleep(20);
   }
 
   // Simulate release on last cell
@@ -592,7 +592,12 @@ function init() {
     if (grid) {
       clearInterval(checkInterval);
       addCaptureButton();
-      console.log('Plugin ready! Click the capture button to screenshot the grid.');
+      console.log('Plugin ready! Auto-solving puzzle...');
+
+      // Auto-solve after a short delay to ensure grid is fully rendered
+      setTimeout(() => {
+        captureGridScreenshot();
+      }, 500);
     }
   }, 500);
 }
