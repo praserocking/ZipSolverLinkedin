@@ -289,12 +289,10 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// Solve the puzzle using DFS
+// Solve the puzzle using DFS with smart move ordering
 function solvePuzzle(gridData) {
-  // Get grid dimensions (assuming square grid)
   const gridSize = Math.sqrt(gridData.length);
 
-  // Find all numbered cells and sort by value
   const numberedCells = gridData
     .filter(c => c.value !== null)
     .map(c => ({ ...c, value: parseInt(c.value) }))
@@ -303,74 +301,62 @@ function solvePuzzle(gridData) {
   console.log(`Solving ${gridSize}x${gridSize} grid with ${numberedCells.length} numbers`);
 
   if (numberedCells.length === 0) {
-    console.log('No numbered cells found');
     return null;
   }
 
-  // Start from cell with value 1
   const startCell = numberedCells[0];
   let iterations = 0;
-  const maxIterations = 1000000000; // 50 million iterations (10-15 seconds)
 
-  // DFS to find path connecting all numbers in order
   function dfs(currentIndex, nextNumberIndex, visited, path) {
     iterations++;
 
-    // Progress logging every 100k iterations
     if (iterations % 100000 === 0) {
-      console.log(`Progress: ${iterations} iterations, visited ${visited.size}/${gridData.length} cells, next number: ${nextNumberIndex + 1}`);
+      console.log(`Progress: ${iterations} iterations, ${visited.size}/${gridData.length} cells, next: ${nextNumberIndex + 1}`);
     }
 
-    // Timeout check
-    if (iterations > maxIterations) {
-      console.log('Solver timeout - too many iterations');
-      return false;
-    }
-
-    // Mark current cell as visited
     visited.add(currentIndex);
     path.push(currentIndex);
 
-    // Check if current cell has the next number we need
-    if (nextNumberIndex < numberedCells.length) {
-      const targetCell = numberedCells[nextNumberIndex];
-      if (currentIndex === targetCell.index) {
-        nextNumberIndex++;
-      }
+    // Check if we reached the next number
+    if (nextNumberIndex < numberedCells.length && currentIndex === numberedCells[nextNumberIndex].index) {
+      nextNumberIndex++;
     }
 
-    // Check if we've visited all cells and all numbers
+    // Success condition
     if (visited.size === gridData.length && nextNumberIndex >= numberedCells.length) {
-      console.log(`Solution found after ${iterations} iterations`);
+      console.log(`✅ Found solution in ${iterations} iterations`);
       return true;
     }
 
-    // Get valid neighbors
-    const neighbors = getValidNeighbors(currentIndex, gridData, gridSize, visited);
-
-    // PRUNING: Check each neighbor to avoid creating isolated regions
-    const validNeighbors = [];
-    for (const neighborIdx of neighbors) {
-      // Temporarily mark as visited
-      visited.add(neighborIdx);
-
-      // Check if remaining unvisited cells are still connected
-      if (areUnvisitedCellsConnected(gridData, gridSize, visited)) {
-        validNeighbors.push(neighborIdx);
+    // CRITICAL PRUNING: Check if all remaining numbers are still reachable
+    for (let i = nextNumberIndex; i < numberedCells.length; i++) {
+      const targetCell = numberedCells[i];
+      if (!canReach(currentIndex, targetCell.index, gridData, gridSize, visited)) {
+        // A required number is unreachable, prune this path
+        visited.delete(currentIndex);
+        path.pop();
+        return false;
       }
-
-      // Unmark
-      visited.delete(neighborIdx);
     }
 
-    // Try each valid neighbor
-    for (const neighborIdx of validNeighbors) {
+    // Get neighbors with smart ordering
+    let neighbors = getValidNeighbors(currentIndex, gridData, gridSize, visited);
+
+    // SMART ORDERING: Prioritize neighbors with fewer unvisited neighbors
+    neighbors = neighbors.map(idx => ({
+      index: idx,
+      score: countUnvisitedNeighbors(idx, gridData, gridSize, visited)
+    }))
+    .sort((a, b) => a.score - b.score)
+    .map(n => n.index);
+
+    // Try each neighbor
+    for (const neighborIdx of neighbors) {
       if (dfs(neighborIdx, nextNumberIndex, visited, path)) {
         return true;
       }
     }
 
-    // Backtrack
     visited.delete(currentIndex);
     path.pop();
     return false;
@@ -383,8 +369,37 @@ function solvePuzzle(gridData) {
     return path;
   }
 
-  console.log(`No solution found after ${iterations} iterations`);
+  console.log(`No solution after ${iterations} iterations`);
   return null;
+}
+
+// Count unvisited neighbors for a cell (for move ordering)
+function countUnvisitedNeighbors(cellIndex, gridData, gridSize, visited) {
+  const neighbors = getValidNeighbors(cellIndex, gridData, gridSize, visited);
+  return neighbors.length;
+}
+
+// Check if target cell is reachable from current cell using BFS
+function canReach(fromIndex, toIndex, gridData, gridSize, visited) {
+  if (fromIndex === toIndex) return true;
+
+  const queue = [fromIndex];
+  const tempVisited = new Set([...visited]);
+  tempVisited.add(fromIndex);
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+
+    if (current === toIndex) return true;
+
+    const neighbors = getValidNeighbors(current, gridData, gridSize, tempVisited);
+    for (const neighbor of neighbors) {
+      tempVisited.add(neighbor);
+      queue.push(neighbor);
+    }
+  }
+
+  return false;
 }
 
 // Check if all unvisited cells are still connected (prevents creating isolated regions)
